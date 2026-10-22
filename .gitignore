@@ -1,0 +1,4 @@
+*.nc
+*.npy
+*.log
+__pycache__/
