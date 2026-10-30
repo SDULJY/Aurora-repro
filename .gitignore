@@ -1,4 +1,7 @@
 *.nc
 *.npy
+*.npz
+*.ckpt
 *.log
 __pycache__/
+cache/

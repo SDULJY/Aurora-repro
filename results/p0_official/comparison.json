@@ -1,0 +1,101 @@
+{
+  "init_time": "2022-01-08T00:00:00+00:00",
+  "lead_hours": 24,
+  "checkpoint": "aurora-0.25-pretrained.ckpt",
+  "official_15deg": "weatherbench2/datasets/aurora/2022-240x121_equiangular_with_poles_conservative.zarr",
+  "official_time_index": 13,
+  "official_lead_index": 3,
+  "at_15deg": {
+    "2t": {
+      "units": "K",
+      "ours_vs_official": {
+        "rmse": 1.1403250528220024,
+        "bias": -0.22376685140001848,
+        "corr": 0.9981778391416234
+      },
+      "ours_vs_era5": {
+        "rmse": 0.7383697935114198,
+        "bias": -0.18570034922994763,
+        "corr": 0.9992496133425638
+      },
+      "official_vs_era5": {
+        "rmse": 1.2453384129547438,
+        "bias": 0.0380665021700709,
+        "corr": 0.9977807064839829
+      }
+    },
+    "msl": {
+      "units": "hPa",
+      "ours_vs_official": {
+        "rmse": 0.6071875109342247,
+        "bias": 0.0030076397988252576,
+        "corr": 0.9988598991481566
+      },
+      "ours_vs_era5": {
+        "rmse": 0.5220162097643037,
+        "bias": -0.02673147456653752,
+        "corr": 0.9992553338306143
+      },
+      "official_vs_era5": {
+        "rmse": 0.6389576620100429,
+        "bias": -0.02973911436536278,
+        "corr": 0.9988603256106278
+      }
+    },
+    "10u": {
+      "units": "m/s",
+      "ours_vs_official": {
+        "rmse": 0.7479862163128467,
+        "bias": 0.0712517229758639,
+        "corr": 0.9868309968288872
+      },
+      "ours_vs_era5": {
+        "rmse": 0.7842687429198932,
+        "bias": 0.04151719107494396,
+        "corr": 0.9898875196521761
+      },
+      "official_vs_era5": {
+        "rmse": 0.9013352442306972,
+        "bias": -0.029734531900919927,
+        "corr": 0.9831638928699122
+      }
+    },
+    "z500": {
+      "units": "m",
+      "ours_vs_official": {
+        "rmse": 3.9376447151660994,
+        "bias": -1.2743109078807962,
+        "corr": 0.999920314994115
+      },
+      "ours_vs_era5": {
+        "rmse": 4.517537306862721,
+        "bias": -1.4550279934218375,
+        "corr": 0.9999117601504703
+      },
+      "official_vs_era5": {
+        "rmse": 4.240769644057202,
+        "bias": -0.18071708554104157,
+        "corr": 0.9998978799688817
+      }
+    },
+    "t850": {
+      "units": "K",
+      "ours_vs_official": {
+        "rmse": 0.676261516302446,
+        "bias": 0.016083596549111137,
+        "corr": 0.9987575516431411
+      },
+      "ours_vs_era5": {
+        "rmse": 0.6234426437434823,
+        "bias": -0.10234247204225566,
+        "corr": 0.9990694942653003
+      },
+      "official_vs_era5": {
+        "rmse": 0.8050495363009826,
+        "bias": -0.11842606859136678,
+        "corr": 0.9983970252454774
+      }
+    }
+  },
+  "note": "official dataset is model output, not ERA5 truth; official_vs_era5 is for context"
+}
