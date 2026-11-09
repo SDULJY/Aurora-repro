@@ -1,154 +1,31 @@
-# Aurora 0.25° 24h 预报复现
+# Aurora 0.25° 全球天气预报复现
 
-复现 Hugging Face × Earthmover 教程：ERA5 初始条件 -> aurora-0.25-pretrained 自回归 4 步 -> 与 ERA5 再分析分析场（作为验证真值代理）对比。
+> A reproducible benchmark of Microsoft Aurora 0.25° global weather forecasting.
 
-## 结果（2026-03-13 00UTC 起报，2 米温度全球纬度加权 RMSE）
+复现 Microsoft Aurora 0.25° 全球天气预报模型，覆盖：
 
-RTX 4090，bf16 autocast：
+- **两种配置**：`pretrained + ERA5 IC`，以及论文/官方示例使用的 `fine-tuned LoRA + HRES T0 IC`
+- **五个变量**：2t、msl、10u、z500、t850
+- **多起报、多季节、10 天时效**：RMSE / bias / ACC，并与 persistence、climatology 基线对比
+- **官方一致性校验**：与 WeatherBench2 的 Aurora 2022 数据集逐场对比
 
-| 时效 | RMSE |
-|---|---|
-| +6h  | 0.522 K |
-| +12h | 0.569 K |
-| +18h | 0.684 K |
-| +24h | 0.742 K |
+> 验证真值统一使用 **ERA5 再分析分析场**（用作观测代理），不是站点或卫星原始观测。
 
-CPU fp32 参考值为 0.520 / 0.567 / 0.680 / 0.740 K，GPU bf16 与它的差异 ≤ 0.004 K。
+## 结果速览
 
-## Phase 1 单例多变量（2026-03-13 00UTC，+24h）
+### 1. 官方同配置 10 天基准（0.25°）
 
-| 变量 | 单位 | Aurora RMSE | 持续性 RMSE | 气候态 RMSE | Aurora ACC |
-|---|---|---|---|---|---|
-| 2t | K | 0.742 | 2.228 | 3.066 | 0.970 |
-| msl | hPa | 0.562 | 5.128 | 7.714 | 0.997 |
-| 10u | m/s | 0.834 | 3.805 | 4.445 | 0.982 |
-| z500 | m | 4.886 | 56.154 | 92.960 | 0.999 |
-| t850 | K | 0.647 | 3.123 | 3.876 | 0.986 |
+**配置**：HRES T0 初始场 + `aurora-0.25-finetuned.ckpt`（LoRA）+ ERA5 0.25° 真值。
 
-- RMSE 为纬度加权（cos lat）；z500 为 geopotential height（geopotential / g），msl 为 hPa；`truth` 为 ERA5 分析场。
-- ACC 使用 WeatherBench2 的 1990–2019 6 小时气候态（1.5°）插值到 0.25° 网格。
-- 这是**单个起报个例**，ACC/RMSE 不能代替多年统计；完整逐时效表见 `results/local/summary.csv`，曲线见 `results/local/rmse_vs_lead.png`、`acc_vs_lead.png`。
+**样本**：2022 年 4 季 × 每季 2 个日期 × 00/12 UTC，共 **16 个起报**；时效 +6h 至 +240h，每 6h 一个，共 40 个时效。表中为跨 16 个 case 的均值 ± 标准差；RMSE 为纬度加权。
 
-## Phase 1 多起报统计（2022-01，4 个起报，+24h）
-
-4 个起报：2022-01-01 / 01-08 / 01-15 / 01-22 00 UTC。表中为均值 ± 跨个例标准差。
-
-| 变量 | 单位 | Aurora RMSE | persistence RMSE | climatology RMSE | Aurora ACC | persistence ACC |
+| 变量 | 单位 | +24h RMSE / ACC | +120h RMSE / ACC | +240h RMSE / ACC | persistence +240h RMSE | climatology +240h RMSE |
 |---|---|---|---|---|---|---|
-| 2t | K | 0.752 ± 0.013 | 2.464 | 2.992 | 0.968 ± 0.002 | 0.652 ± 0.051 |
-| msl | hPa | 0.560 ± 0.040 | 6.268 | 7.042 | 0.997 ± 0.000 | 0.606 ± 0.117 |
-| 10u | m/s | 0.824 ± 0.030 | 3.950 | 3.837 | 0.977 ± 0.001 | 0.475 ± 0.071 |
-| z500 | m | 5.109 ± 0.299 | 64.256 | 84.917 | 0.998 ± 0.000 | 0.707 ± 0.060 |
-| t850 | K | 0.646 ± 0.015 | 3.241 | 3.624 | 0.984 ± 0.001 | 0.586 ± 0.048 |
-
-- 数据源：Earthmover ERA5（快照 `TZ2KX6A24CJ5DG17T7MG`），4 MB/层 chunk；走代理时约 2 分钟/case。
-- ACC 气候态：WeatherBench2 1990–2019 6h（1.5°）插值到 0.25°。
-- 完整逐时效表：`results/em_jan/summary.csv`、`per_case.csv`、`summary.json`；曲线：`rmse_vs_lead.png`、`acc_vs_lead.png`。
-- 4 个 case 都在 1 月，季节覆盖有限；更多季节/时次可用同一命令追加。
-
-## P0 官方 2022 输出对比
-
-官方 2022 数据集是**模型输出**，其示例使用 **HRES T0 初始场 + fine-tuned（LoRA）模型**。
-
-- 不同配置（ERA5 IC + pretrained）在 2022-01-08T00 +24h：2t 1.140 K、msl 0.607 hPa、10u 0.748 m/s、z500 3.938 m、t850 0.676 K。
-- 同配置（HRES T0 IC + `aurora-0.25-finetuned.ckpt` + `use_lora=True`）：2t 0.731 K、msl 0.365 hPa、10u 0.503 m/s、**z500 0.972 m（corr 0.99999）**、t850 0.240 K；双方对 ERA5 的 RMSE 也几乎一致（z500 4.239 vs 4.241 m）。
-- **0.25° 2t 逐格对比：RMSE 0.064 K（corr 0.999994）**；1.5° 下的 2t 差异主要是重网格化造成的。
-- 结论：同配置下我们的 pipeline 与官方数据集一致。详见 `results/p0_official/README.md`、`results/p0_official_matched/official_vs_ours_matched_15deg.png`。
-
-## 环境
-
-- Python 3.12
-- CUDA 12.4 + PyTorch 2.5.1（GPU 推理需要；CPU 也能跑，但慢）
-- 显存：24 GB（实测峰值约 19.9 GB；fp32 会 OOM，必须开 bf16 autocast）
-- 依赖：`requirements.txt`（直接依赖）或 `requirements-lock.txt`（完整锁定）
-
-```bash
-pip install -r requirements.txt
-# 或精确复现：
-pip install -r requirements-lock.txt
-```
-
-## 数据与模型版本
-
-- HF：`microsoft/aurora@a96afd7ee6d65e3bd2d476f3be798a25a56f2296`（`aurora-0.25-pretrained.ckpt` + `aurora-0.25-static.pickle`）
-- Earthmover ERA5：快照 `TZ2KX6A24CJ5DG17T7MG`（2026-10-28 的 main）
-- WeatherBench2（备选数据源 + 气候态）：`weatherbench2/datasets/era5/1959-2023_01_10-wb13-6h-1440x721.zarr`
-- 气候态：`weatherbench2/datasets/era5-hourly-climatology/1990-2019_6h_240x121_...zarr`
-- 验证口径：所有 RMSE/ACC 的 `truth` 都是 **ERA5 再分析分析场**（初始场也来自 ERA5），不是站点/卫星原始观测
-- 数据更新后可给 `fetch_data.py` 传 `--snapshot main`
-- 旧脚本下载的 NetCDF 没有 `source_snapshot` 属性，`results.json` 会记为 `unknown`；重新运行 `fetch_data.py` 后会写入实际快照
-
-## 运行
-
-### 单例 24h 预报
-
-```bash
-# 1) 下载 ERA5（首次约 650 MB；之后复用缓存）
-python -u fetch_data.py --init-time 2026-03-13T00:00:00 --lead-hours 24 --out .
-
-# 2) GPU 推理 + 检验
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -u run.py \
-  --init-time 2026-03-13T00:00:00 --lead-hours 24 --device auto --out .
-```
-
-- `--lead-hours` 必须是 6 的倍数；所有验证时刻由起报时刻自动推导，不再需要手改 `VALID_TIME`。
-- `--out` 在 fetch 中是 NetCDF 目录，在 run 中是预测/图/指标目录。
-- `--data-dir` 指定 run.py 读取 NetCDF 的目录（默认当前目录）。
-- `--device auto|cuda|cpu`；`auto` 优先 CUDA。
-- run.py 会在 GPU 上自动开启 backbone/encoder/decoder 的 bf16 autocast，并设置 `PYTORCH_CUDA_ALLOC_CONF`；命令里显式写出只是为了排查内存问题时更直观。
-
-### 多变量 / 多时次评估
-
-```bash
-# 1) 本地个例：补抓 Z500/T850 真值（8 个 4 MB chunk）
-python -u fetch_truth.py --init-time 2026-03-13T00:00:00 --lead-hours 24 --out cache
-
-# 2) 单例五变量 + ACC + 基线
-python -u evaluate.py --source local \
-  --init-times 2026-03-13T00:00:00 --lead-hours 24 \
-  --device auto --climatology wb2 --out results/local
-
-# 3) 多起报时次（Earthmover，4 MB/层 chunk；可用代理加速）
-export http_proxy=http://<proxy-host>:<port>
-export https_proxy=http://<proxy-host>:<port>
-python -u evaluate.py --source earthmover \
-  --init-times 2022-01-01T00:00:00,2022-04-01T00:00:00,2022-07-01T00:00:00,2022-10-01T00:00:00 \
-  --lead-hours 24 --device auto --climatology wb2 --workers 8 --out results/em
-```
-
-- `--source earthmover` 按 4 MB/层读取，`--workers` 控制并发；首次为每个 case 下载约 150 个 chunk（约 600 MB），之后复用 `cache/em_*.npz`。
-- `--source wb2` 是另一条路径：WeatherBench2 ERA5（1959-01-01 至 2023-01-10），压力场是整块读取；2026-10-28 直连 GCS 实测 2–4 MB/s，54 MB chunk 可正常读取。
-- 两种 source 都可以用 `--dry-run` 先检查时次/索引/缓存路径，不下载。
-- 气候态为 1990–2019；跨季节多 case 时，1.5° 气候态会一次性读取所需日期的 chunk。
-- `evaluate.py` 的指标：`summary.csv`（按变量/时效/方法聚合）、`per_case.csv`（逐 case）、`summary.json`、`rmse_vs_lead.png`、`acc_vs_lead.png`。
-- 基线：persistence（初始场保持不变）与气候态；ACC 只对 Aurora 和 persistence 计算（气候态自身异常为 0）。
-
-### Paper 口径（HRES T0 + fine-tuned + 10 天）
-
-```bash
-# fine-tuned checkpoint（约 5 GB，LoRA）需先下载到本地
-python -u evaluate.py --source paper \
-  --init-times 2022-01-02T00:00:00,2022-01-02T12:00:00,2022-01-16T00:00:00,2022-01-16T12:00:00,2022-04-01T00:00:00,2022-04-01T12:00:00,2022-04-15T00:00:00,2022-04-15T12:00:00,2022-07-01T00:00:00,2022-07-01T12:00:00,2022-07-15T00:00:00,2022-07-15T12:00:00,2022-10-01T00:00:00,2022-10-01T12:00:00,2022-10-15T00:00:00,2022-10-15T12:00:00 \
-  --lead-hours 240 --workers 10 \
-  --checkpoint-path /path/to/aurora-0.25-finetuned.ckpt \
-  --climatology wb2 --no-clim-cache --out results/paper_2022_4season_10d
-```
-
-- `--source paper` = **HRES T0 IC + WB2 ERA5 truth + `aurora-0.25-finetuned.ckpt`（自动 `use_lora=True`）**，与官方 2022 数据集同配置；P0 已校验：z500 0.97 m、0.25° 2t 0.064 K。
-- 16 个 case：4 季 × 2 日 × 00/12 UTC，10 天（40 个 6h 时效）。
-- 首次运行会下载 HRES T0 IC（约 570 MB/case）和 WB2 ERA5 truth（实际下载约 1.6–2 GB/case，缓存 npz 约 0.83 GB）；truth 缓存为 `cache/wb2truth_*.npz`，中断后可续跑。
-- `--no-clim-cache` 避免 10 天 × 多 case 产生大量逐时次气候态文件；ACC 按 case 现算。
-- 数据量大，建议后台运行；本次 16 case 实测约 **1 小时 45 分钟**（直连/代理恢复后约 3–5 分钟/case）。
-
-**完整 0.25° 结果**（2026-10-28，16 case × 4 季 × 10 天；HRES T0 IC + fine-tuned LoRA，ERA5 0.25° 真值，纬度加权）：
-
-| 变量 | 单位 | +24h RMSE / ACC | +120h RMSE / ACC | +240h RMSE / ACC | persistence +240h | climatology +240h |
-|---|---|---|---|---|---|---|
-| 2t | K | 1.035 ± 0.088 / 0.928 | 1.480 ± 0.116 / 0.842 | 2.495 ± 0.245 / 0.471 | 3.482 | 2.620 |
-| msl | hPa | 0.625 ± 0.028 / 0.996 | 2.681 ± 0.266 / 0.923 | 6.313 ± 0.662 / 0.468 | 9.714 | 7.083 |
-| 10u | m/s | 0.893 ± 0.015 / 0.973 | 2.170 ± 0.075 / 0.824 | 3.641 ± 0.150 / 0.400 | 5.593 | 3.918 |
-| z500 | m | 4.489 ± 0.247 / 0.998 | 26.584 ± 2.338 / 0.946 | 69.792 ± 7.059 / 0.519 | 113.840 | 79.439 |
-| t850 | K | 0.824 ± 0.044 / 0.973 | 1.581 ± 0.069 / 0.889 | 3.094 ± 0.225 / 0.452 | 4.780 | 3.334 |
+| 2t | K | **1.035 ± 0.088 / 0.928** | 1.480 ± 0.116 / 0.842 | 2.495 ± 0.245 / 0.471 | 3.482 | 2.620 |
+| msl | hPa | **0.625 ± 0.028 / 0.996** | 2.681 ± 0.266 / 0.923 | 6.313 ± 0.662 / 0.468 | 9.714 | 7.083 |
+| 10u | m/s | **0.893 ± 0.015 / 0.973** | 2.170 ± 0.075 / 0.824 | 3.641 ± 0.150 / 0.400 | 5.593 | 3.918 |
+| z500 | m | **4.489 ± 0.247 / 0.998** | 26.584 ± 2.338 / 0.946 | 69.792 ± 7.059 / 0.519 | 113.840 | 79.439 |
+| t850 | K | **0.824 ± 0.044 / 0.973** | 1.581 ± 0.069 / 0.889 | 3.094 ± 0.225 / 0.452 | 4.780 | 3.334 |
 
 2t 分季节（RMSE / ACC）：
 
@@ -159,83 +36,236 @@ python -u evaluate.py --source paper \
 | JJA | 0.977 / 0.925 | 1.469 / 0.822 | 2.405 / 0.452 |
 | SON | 0.960 / 0.928 | 1.356 / 0.858 | 2.268 / 0.544 |
 
-- 输出：`results/paper_2022_4season_10d/`（summary.csv、per_case.csv、summary.json、rmse_vs_lead.png、acc_vs_lead.png）。
-- 与官方 1.5° 同日期基准交叉核对：官方 2t +24h / +240h = 0.850 / 2.370 K，msl = 0.568 / 6.265 hPa，10u = 0.706 / 3.534 m/s。我们的 0.25° 值略高是网格更细、未经过 1.5° 保守重网格平滑所致，季节排序一致。
+完整逐时效、逐 case 结果：
 
-**网络（2026-10-28 更新）**：直连 GCS 已恢复，12 MB 与 54 MB（压缩后约 24.6 MB）chunk 实测 2.7–3.9 MB/s，0.25° paper 全流程已跑通。若直连不稳，可用局域网代理 `http://10.25.210.207:7897`，但代理依赖本机开机。
+- [`results/paper_2022_4season_10d/summary.csv`](results/paper_2022_4season_10d/summary.csv)
+- [`results/paper_2022_4season_10d/per_case.csv`](results/paper_2022_4season_10d/per_case.csv)
+- [`results/paper_2022_4season_10d/rmse_vs_lead.png`](results/paper_2022_4season_10d/rmse_vs_lead.png)
+- [`results/paper_2022_4season_10d/acc_vs_lead.png`](results/paper_2022_4season_10d/acc_vs_lead.png)
 
-官方 1.5° 2022 数据集的 10 天基准命令（备用）：
+### 2. 与官方 Aurora 2022 数据集的一致性校验
 
-```bash
-python -u evaluate_official_15deg.py \
-  --init-times 2022-01-02T00:00:00,2022-01-02T12:00:00,2022-01-16T00:00:00,2022-01-16T12:00:00,2022-04-01T00:00:00,2022-04-01T12:00:00,2022-04-15T00:00:00,2022-04-15T12:00:00,2022-07-01T00:00:00,2022-07-01T12:00:00,2022-07-15T00:00:00,2022-07-15T12:00:00,2022-10-01T00:00:00,2022-10-01T12:00:00,2022-10-15T00:00:00,2022-10-15T12:00:00 \
-  --lead-hours 240 --climatology none --workers 8 \
-  --out results/paper_official15_4season_10d
-```
+官方 2022 数据集是**模型输出**，不是 ERA5 真值；其示例配置为 **HRES T0 初始场 + fine-tuned 模型**。我们用同一配置、同一初始时刻 `2022-01-08T00`、同一时效 `+24h`，在 1.5° 网格上做逐场对比：
 
-- 官方 1.5° 2022 数据集是 **HRES T0 + fine-tuned** 模型输出；P0 已验证同配置 0.25° +24h 与我们的输出一致（2t 0.064 K）。
-- 真值为 ERA5 1.5°；16 case × 40 个时效。本次先跑了地面变量；直连恢复后可直接去掉 `--surface-only`，并把 `--climatology none` 改成 `wb2`，补齐 Z500/T850 与 ACC。
+| 变量 | 单位 | 我们 vs 官方 RMSE | 我们 vs ERA5 | 官方 vs ERA5 |
+|---|---|---|---|---|
+| 2t | K | 0.731 | 1.182 | 1.245 |
+| msl | hPa | 0.365 | 0.612 | 0.639 |
+| 10u | m/s | 0.503 | 0.865 | 0.901 |
+| z500 | m | **0.972** | 4.239 | 4.241 |
+| t850 | K | **0.240** | 0.787 | 0.805 |
 
-**已跑通的地面变量结果**（`--surface-only`，16 case × 4 季 × 10 天，官方 1.5° 预报 vs ERA5 1.5° 真值）：
+- **z500 只差 0.972 m（corr 0.99999）**，t850 差 0.240 K，msl 差 0.365 hPa，说明 IC、预处理、rollout、单位、层次和时效都对上了。
+- 0.25° 网格上 2t 的逐格 RMSE 仅 **0.064 K**（corr 0.999994）；1.5° 下 2t/10u 的剩余差异主要来自 0.25° → 1.5° 重网格化。
+- 详细报告：[`results/p0_official/README.md`](results/p0_official/README.md)；场图：[`results/p0_official_matched/official_vs_ours_matched_15deg.png`](results/p0_official_matched/official_vs_ours_matched_15deg.png)。
 
-| 变量 | 单位 | +24h | +120h | +240h | persistence +240h |
+### 3. 官方 1.5° 2022 数据集的 4 季 × 10 天基准
+
+用官方 1.5° 预报与 ERA5 1.5° 真值做同日期交叉核对（16 个 case；官方数据同为 HRES T0 + fine-tuned 配置）：
+
+| 变量 | 单位 | +24h RMSE | +120h RMSE | +240h RMSE | persistence +240h RMSE |
 |---|---|---|---|---|---|
 | 2t | K | 0.850 ± 0.081 | 1.330 ± 0.110 | 2.370 ± 0.243 | 3.345 |
 | msl | hPa | 0.568 ± 0.024 | 2.651 ± 0.266 | 6.265 ± 0.657 | 9.695 |
 | 10u | m/s | 0.706 ± 0.016 | 2.035 ± 0.078 | 3.534 ± 0.159 | 5.394 |
 
-- 16 个 case：2022-01-02/16、04-01/15、07-01/15、10-01/15，00/12 UTC。
-- 输出：`results/paper_official15_surface_4season_10d/`（summary.csv、per_case.csv、rmse_vs_lead.png）。
-- **Z500/T850 与 ACC 待补**：本次只跑了地面变量。直连 GCS 已恢复（12 MB/41.8 MB chunk 均可读），重跑时去掉 `--surface-only` 并加 `--climatology wb2` 即可。
+我们的 0.25° 结果略高于官方 1.5°，符合预期：0.25° 保留了更多小尺度结构，而官方数据经过 1.5° 保守重网格平滑；两者的季节排序和变量间相对关系一致。
 
-## 硬件与耗时
+<details>
+<summary><strong>早期单例与 2022-01 验证结果</strong>（点击展开）</summary>
 
-| 设备 | 每步 | 4 步 24h 预报 |
-|---|---|---|
-| RTX 4090（bf16 autocast） | ~1.8 s | ~7 s（模型加载另约 16 s） |
-| CPU | ~2–3 min | ~8–12 min |
+#### 单例 24h（2026-03-13 00 UTC，2t）
 
-显存峰值约 19.9 GB；fp32 在 24 GB 卡上会 OOM。
+RTX 4090，bf16 autocast；CPU fp32 参考值为 0.520 / 0.567 / 0.680 / 0.740 K。
 
-Earthmover 多时次数据：约 150 个 4 MB chunk/case；8 workers 下载约 1–3 分钟/case（代理速度良好时）。
+| 时效 | +6h | +12h | +18h | +24h |
+|---|---|---|---|---|
+| RMSE | 0.522 K | 0.569 K | 0.684 K | 0.742 K |
 
-## 输出文件
+#### 单例五变量 +24h
 
-- `era5_single.nc` / `era5_press.nc` — ERA5 缓存（gitignore）
-- `preds_2t.npy` — 各时效 2t 预测，形状 `(steps, 720, 1440)`
-- `results.json` — 单例 2t 的起报时刻、模型/数据版本、RMSE、耗时
-- `verify_{lead}h.png` — 最后一个时效的预测与偏差图
-- `results/local/` — Phase 1 单例五变量指标与曲线
-- `results/em_jan/` — 本次 4 起报评估输出（README 命令写到 `results/em/`，目录名由 `--out` 决定）
-- `results/p0_official/` — 与官方 2022 数据集的场对比（报告、指标、图）
-- `results/p0_official_matched/` — HRES T0 + fine-tuned 同配置对比
-- `results/paper_2022_4season_10d/` — paper 口径 16 case × 10 天完整评估（0.25°，已完成）
-- `results/paper_official15_4season_10d/` — 官方 1.5° 2022 数据集的 4 季 × 10 天基准命令（5 变量；本次未完整跑，地面变量见下）
-- `results/paper_official15_surface_4season_10d/` — 已跑通的地面变量 4 季 × 10 天基准（2t/msl/10u）
-- `results/wb2/` — WeatherBench2 多时次评估输出（备选路径）
-- `bias_evolution.png` — 早期手工生成的四时效偏差图（`evaluate.py` 生成的是逐时效 RMSE/ACC 曲线，不生成该偏差图）
+| 变量 | 单位 | Aurora RMSE | persistence | climatology | Aurora ACC |
+|---|---|---|---|---|---|
+| 2t | K | 0.742 | 2.228 | 3.066 | 0.970 |
+| msl | hPa | 0.562 | 5.128 | 7.714 | 0.997 |
+| 10u | m/s | 0.834 | 3.805 | 4.445 | 0.982 |
+| z500 | m | 4.886 | 56.154 | 92.960 | 0.999 |
+| t850 | K | 0.647 | 3.123 | 3.876 | 0.986 |
 
-## 文件
+#### 2022-01 四个起报 +24h
 
-- `config.py` — 共享配置、CLI 参数、时间推导
-- `fetch_data.py` — 从 Earthmover 拉取 ERA5 并缓存
-- `fetch_truth.py` — 补抓 Z500/T850 真值（local 数据源）
-- `aurora_utils.py` — 模型加载、Batch 组装、rollout
-- `metrics.py` — 纬度加权 RMSE / bias / ACC
-- `sources.py` — local / Earthmover / WeatherBench2 数据源、气候态读取
-- `evaluate.py` — 多变量/多时次评估 harness
-- `compare_official.py` — 与官方 Aurora 2022 数据集的场对比（P0）
-- `compare_official_matched.py` — HRES T0 + fine-tuned 同配置 P0 对比
-- `evaluate_official_15deg.py` — 官方 1.5° 2022 数据的 4 季 × 10 天基准
-- `run.py` — 单例 2t 快速验证与画图
-- `requirements.txt` / `requirements-lock.txt`
+起报：2022-01-01 / 01-08 / 01-15 / 01-22 00 UTC；均值 ± 跨个例标准差。
 
-数据缓存（`*.nc`）、预测数组（`*.npy`、`*.npz`）和下载缓存（`cache/`）不入库，可由脚本重新生成。
+| 变量 | 单位 | Aurora RMSE | persistence | climatology | Aurora ACC | persistence ACC |
+|---|---|---|---|---|---|---|
+| 2t | K | 0.752 ± 0.013 | 2.464 | 2.992 | 0.968 ± 0.002 | 0.652 ± 0.051 |
+| msl | hPa | 0.560 ± 0.040 | 6.268 | 7.042 | 0.997 ± 0.000 | 0.606 ± 0.117 |
+| 10u | m/s | 0.824 ± 0.030 | 3.950 | 3.837 | 0.977 ± 0.001 | 0.475 ± 0.071 |
+| z500 | m | 5.109 ± 0.299 | 64.256 | 84.917 | 0.998 ± 0.000 | 0.707 ± 0.060 |
+| t850 | K | 0.646 ± 0.015 | 3.241 | 3.624 | 0.984 ± 0.001 | 0.586 ± 0.048 |
+
+结果目录：`results/local/`、`results/em_jan/`。
+
+</details>
+
+## 快速开始
+
+### 环境
+
+| 项目 | 要求 |
+|---|---|
+| Python | 3.12 |
+| CUDA / PyTorch | CUDA 12.4 + PyTorch 2.5.1 |
+| GPU 显存 | 24 GB（实测峰值约 19.9 GB；fp32 会 OOM，需 bf16 autocast） |
+| 其他 | CPU 也可运行，但速度慢很多 |
+
+```bash
+pip install -r requirements.txt
+# 或精确复现：
+pip install -r requirements-lock.txt
+```
+
+### 数据与模型版本
+
+| 资源 | 版本 / 路径 |
+|---|---|
+| Aurora 模型 | `microsoft/aurora@a96afd7ee6d65e3bd2d476f3be798a25a56f2296` |
+| pretrained checkpoint | `aurora-0.25-pretrained.ckpt` |
+| fine-tuned checkpoint | `aurora-0.25-finetuned.ckpt`（LoRA，约 5 GB，需单独下载） |
+| 静态场 | `aurora-0.25-static.pickle` |
+| Earthmover ERA5 | 快照 `TZ2KX6A24CJ5DG17T7MG` |
+| ERA5 0.25°（WB2） | `weatherbench2/datasets/era5/1959-2023_01_10-wb13-6h-1440x721.zarr` |
+| HRES T0 0.25° | `weatherbench2/datasets/hres_t0/2016-2022-6h-1440x721.zarr` |
+| 气候态 | `weatherbench2/datasets/era5-hourly-climatology/1990-2019_6h_240x121_...zarr` |
+
+- 验证真值统一为 **ERA5 再分析分析场**，不是站点观测。
+- Earthmover 快照更新后，`fetch_data.py` 可传 `--snapshot main`。
+- 数据、预测数组、checkpoint 和下载缓存均不入库，可由脚本重新生成。
+
+### 1. 单例 24h 预报
+
+```bash
+# 下载 ERA5（首次约 650 MB；之后复用缓存）
+python -u fetch_data.py \
+  --init-time 2026-03-13T00:00:00 --lead-hours 24 --out .
+
+# GPU 推理 + 2t 检验
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -u run.py \
+  --init-time 2026-03-13T00:00:00 --lead-hours 24 --device auto --out .
+```
+
+- `--lead-hours` 必须是 6 的倍数，验证时刻由起报时刻自动推导。
+- `--device auto|cuda|cpu`；`auto` 优先 CUDA。
+- GPU 上自动开启 bf16 autocast；命令中的 `PYTORCH_CUDA_ALLOC_CONF` 用于降低显存碎片。
+
+### 2. 多变量 / 多时次评估
+
+```bash
+# 补抓 Z500/T850 真值（local 数据源）
+python -u fetch_truth.py \
+  --init-time 2026-03-13T00:00:00 --lead-hours 24 --out cache
+
+# 单例五变量 + ACC + 基线
+python -u evaluate.py --source local \
+  --init-times 2026-03-13T00:00:00 --lead-hours 24 \
+  --device auto --climatology wb2 --out results/local
+
+# 多起报时次（Earthmover，4 MB/层 chunk）
+# 如需代理，请先设置自己的 http_proxy / https_proxy
+python -u evaluate.py --source earthmover \
+  --init-times 2022-01-01T00:00:00,2022-04-01T00:00:00,2022-07-01T00:00:00,2022-10-01T00:00:00 \
+  --lead-hours 24 --device auto --climatology wb2 --workers 8 --out results/em
+```
+
+- `--source earthmover` 按 4 MB/层读取，`--workers` 控制并发；每个 case 约 150 个 chunk，首次下载约 600 MB，之后复用 `cache/em_*.npz`。
+- `--source wb2` 直接读 WeatherBench2 ERA5；压力场按整块读取，适合 GCS 访问较快的机器。
+- `--source paper` 使用 HRES T0 IC + WB2 ERA5 真值 + fine-tuned LoRA，见下一节。
+- 各数据源都支持 `--dry-run`，可先检查时次、索引和缓存路径而不下载。
+
+### 3. Paper 口径：16 个起报 × 10 天
+
+```bash
+python -u evaluate.py --source paper \
+  --init-times 2022-01-02T00:00:00,2022-01-02T12:00:00,2022-01-16T00:00:00,2022-01-16T12:00:00,2022-04-01T00:00:00,2022-04-01T12:00:00,2022-04-15T00:00:00,2022-04-15T12:00:00,2022-07-01T00:00:00,2022-07-01T12:00:00,2022-07-15T00:00:00,2022-07-15T12:00:00,2022-10-01T00:00:00,2022-10-01T12:00:00,2022-10-15T00:00:00,2022-10-15T12:00:00 \
+  --lead-hours 240 --workers 10 \
+  --checkpoint-path /path/to/aurora-0.25-finetuned.ckpt \
+  --climatology wb2 --no-clim-cache \
+  --out results/paper_2022_4season_10d
+```
+
+- `--source paper` 会自动启用 `use_lora=True`，与官方 2022 数据集同配置。
+- 首次运行会下载 HRES T0 IC（约 570 MB/case）和 WB2 ERA5 真值（约 1.6–2 GB/case）；真值缓存为 `cache/wb2truth_*.npz`，中断后可续跑。
+- `--no-clim-cache` 避免 10 天 × 多 case 产生大量逐时次气候态文件；ACC 按 case 现算。
+- 本次 16 个 case 实测约 **1 小时 45 分钟**（网络恢复后约 3–5 分钟/case）。
+
+### 4. 官方 1.5° 2022 数据集基准（可选）
+
+```bash
+python -u evaluate_official_15deg.py \
+  --init-times 2022-01-02T00:00:00,2022-01-02T12:00:00,2022-01-16T00:00:00,2022-01-16T12:00:00,2022-04-01T00:00:00,2022-04-01T12:00:00,2022-04-15T00:00:00,2022-04-15T12:00:00,2022-07-01T00:00:00,2022-07-01T12:00:00,2022-07-15T00:00:00,2022-07-15T12:00:00,2022-10-01T00:00:00,2022-10-01T12:00:00,2022-10-15T00:00:00,2022-10-15T12:00:00 \
+  --lead-hours 240 --workers 8 \
+  --out results/paper_official15_4season_10d
+```
+
+- 该脚本读取官方 1.5° 预报和 ERA5 1.5° 真值；默认包含 Z500/T850 和 ACC。
+- 如果只想先跑地面变量，可加 `--surface-only`；本次已跑通的结果在 `results/paper_official15_surface_4season_10d/`。
+
+## 评估口径
+
+- **RMSE**：全球纬度加权，权重 ∝ cos(lat)。
+- **ACC**：相对 1990–2019 6 小时气候态（1.5°）的异常相关系数；气候态双线性插值到 0.25°。
+- **z500**：位势高度，单位 m（geopotential / g）；**msl**：hPa；**2t / t850**：K；**10u**：m/s。
+- **基线**：persistence（初始场保持不变）与 climatology（同日历时气候态）。
+- **样本**：16 个 case = 4 季 × 2 个日期 × 00/12 UTC；每个 case 40 个时效（+6h 至 +240h）。
+- **真值**：ERA5 再分析分析场；初始场在 paper 配置中来自 HRES T0，在 pretrained 配置中来自 ERA5。
+
+## 结果文件
+
+| 目录 | 内容 |
+|---|---|
+| `results/paper_2022_4season_10d/` | 主结果：16 case × 10 天，5 变量，0.25° |
+| `results/paper_official15_surface_4season_10d/` | 官方 1.5° 预报的地面变量基准（2t/msl/10u） |
+| `results/p0_official/` | 官方 2022 数据集一致性报告与场图 |
+| `results/p0_official_matched/` | HRES T0 + fine-tuned 同配置对比 |
+| `results/em_jan/` | 2022-01 四个起报的 Phase 1 结果 |
+| `results/local/` | 2026-03-13 单例五变量结果 |
+
+每个结果目录通常包含：
+
+- `summary.csv` — 按变量 / 时效 / 方法聚合
+- `per_case.csv` — 逐 case 明细
+- `summary.json` — 可机读的完整指标与配置
+- `rmse_vs_lead.png`、`acc_vs_lead.png` — 逐时效曲线
+
+## 项目结构
+
+| 文件 | 作用 |
+|---|---|
+| `config.py` | 共享配置、CLI 参数、时间推导 |
+| `fetch_data.py` | 从 Earthmover 拉取 ERA5 并缓存 |
+| `fetch_truth.py` | 补抓 Z500/T850 真值（local 数据源） |
+| `aurora_utils.py` | 模型加载、Batch 组装、rollout |
+| `metrics.py` | 纬度加权 RMSE / bias / ACC |
+| `sources.py` | local / Earthmover / WeatherBench2 数据源、气候态读取 |
+| `evaluate.py` | 多变量、多时次评估 harness |
+| `compare_official.py` | 与官方 Aurora 2022 数据集的场对比（P0） |
+| `compare_official_matched.py` | HRES T0 + fine-tuned 同配置 P0 对比 |
+| `evaluate_official_15deg.py` | 官方 1.5° 2022 数据的 4 季 × 10 天基准 |
+| `run.py` | 单例 2t 快速验证与画图 |
+| `requirements.txt` / `requirements-lock.txt` | 直接依赖 / 完整锁定版本 |
 
 ## 已知限制
 
-- Phase 1 目前有 2026-03-13 单例和 2022-01 四个起报；季节覆盖仍有限，更多时次可用 `--source earthmover` 追加。
-- Earthmover 直连时单 chunk 可能要几十秒；设置 `http_proxy`/`https_proxy` 后可到 1–5 s/chunk。
-- ACC 使用 1.5° 气候态插值到 0.25°，与直接在 0.25° 气候态上计算不完全等价。
-- 1.5° 气候态插值会平滑小尺度异常，单例 ACC 偏高（0.97–0.999），多时次统计会更有参考价值。
-- `--snapshot` 固定的 Earthmover 快照若被清理，可改用 `--snapshot main`。
+- **真值口径**：ERA5 是再分析产品，不是站点/卫星观测；结论应表述为“相对 ERA5 的误差”，不是“相对真实观测的误差”。
+- **样本规模**：16 个 case 覆盖 2022 年四季，但不是多年气候统计；表中的标准差只反映跨 case 差异，不能替代多年显著性检验。
+- **ACC 气候态**：使用 1.5° 气候态插值到 0.25°，与直接在 0.25° 气候态上计算不完全等价，单例 ACC 可能偏高。
+- **官方 1.5° 基准**：当前只跑了地面变量（2t/msl/10u）；Z500/T850 与 ACC 可按第 4 节命令补齐。
+- **显存**：fp32 在 24 GB 卡上会 OOM；需要 bf16 autocast 和 `expandable_segments`。
+- **数据快照**：Earthmover 快照若被清理，改用 `--snapshot main`；不同快照的数值可能有细微差异。
+
+## 数据来源与致谢
+
+- **Microsoft Aurora**：模型代码与权重来自 [`microsoft/aurora`](https://github.com/microsoft/aurora)（MIT License；具体以官方仓库/模型卡为准），通过 Hugging Face 固定 revision 使用。
+- **ERA5**：Copernicus Climate Change Service 再分析数据；经 Earthmover Arraylake 与 WeatherBench2 访问，使用时请遵循 Copernicus 数据许可与署名要求。
+- **WeatherBench2**：提供 ERA5、HRES T0、Aurora 2022 预报和 1990–2019 气候态数据集；请引用其原始论文/数据说明。
+- 本仓库代码目前未单独声明开源许可证；第三方代码、模型和数据遵循各自原始许可证。

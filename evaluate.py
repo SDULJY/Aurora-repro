@@ -20,6 +20,7 @@ from config import (
     HF_REVISION,
     LEVELS,
     MODEL_STEP_HOURS,
+    display_path,
     forecast_times,
     parse_lead_hours,
     parse_utc,
@@ -354,7 +355,7 @@ def main() -> None:
         "model": {
             "repo": HF_REPO_ID,
             "checkpoint": args.checkpoint,
-            "checkpoint_path": args.checkpoint_path,
+            "checkpoint_path": display_path(args.checkpoint_path),
             "use_lora": args.use_lora,
             "revision": HF_REVISION,
         },

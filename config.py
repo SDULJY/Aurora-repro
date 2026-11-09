@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 
 import numpy as np
 
@@ -23,6 +24,11 @@ STATIC_NAME = "aurora-0.25-static.pickle"
 ERA5_REPO_ID = "earthmover-public/era5"
 # 2026-10-28 解析到的 main 快照；若快照过期，fetch_data.py 可传 --snapshot main。
 ERA5_SNAPSHOT = "TZ2KX6A24CJ5DG17T7MG"
+
+
+def display_path(path: str | None) -> str | None:
+    """结果元数据只记录文件名，避免把本地绝对路径写入公开结果。"""
+    return os.path.basename(path) if path else None
 
 
 def parse_utc(value: str) -> dt.datetime:

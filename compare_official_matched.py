@@ -30,7 +30,14 @@ from compare_official import (
     _time_index,
     extract_fields,
 )
-from config import CHECKPOINT_NAME, MODEL_STEP_HOURS, forecast_times, parse_lead_hours, parse_utc
+from config import (
+    CHECKPOINT_NAME,
+    MODEL_STEP_HOURS,
+    display_path,
+    forecast_times,
+    parse_lead_hours,
+    parse_utc,
+)
 from sources import CachedCaseSource, HREST0Source
 
 
@@ -151,7 +158,7 @@ def main() -> None:
         "lead_hours": args.lead_hours,
         "ic_source": "hres_t0",
         "checkpoint": args.checkpoint,
-        "checkpoint_path": args.checkpoint_path,
+        "checkpoint_path": display_path(args.checkpoint_path),
         "official_15deg": OFFICIAL_15,
         "official_time_index": time_idx,
         "official_lead_index": lead_idx,

@@ -32,7 +32,7 @@
   "model": {
     "repo": "microsoft/aurora",
     "checkpoint": "aurora-0.25-finetuned.ckpt",
-    "checkpoint_path": "/root/autodl-tmp/aurora/aurora-0.25-finetuned.ckpt",
+    "checkpoint_path": "aurora-0.25-finetuned.ckpt",
     "use_lora": true,
     "revision": "a96afd7ee6d65e3bd2d476f3be798a25a56f2296"
   },

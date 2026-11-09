@@ -2,7 +2,7 @@
   "init_time": "2022-01-08T00:00:00+00:00",
   "lead_hours": 24,
   "checkpoint": "aurora-0.25-finetuned.ckpt",
-  "checkpoint_path": "/root/autodl-tmp/aurora/aurora-0.25-finetuned.ckpt",
+  "checkpoint_path": "aurora-0.25-finetuned.ckpt",
   "official_15deg": "weatherbench2/datasets/aurora/2022-240x121_equiangular_with_poles_conservative.zarr",
   "official_time_index": 13,
   "official_lead_index": 3,

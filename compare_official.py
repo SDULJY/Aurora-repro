@@ -19,7 +19,14 @@ import zarr
 from scipy.interpolate import RegularGridInterpolator
 
 from aurora_utils import build_batch, choose_device, load_model, run_rollout
-from config import CHECKPOINT_NAME, LEVELS, MODEL_STEP_HOURS, parse_lead_hours, parse_utc
+from config import (
+    CHECKPOINT_NAME,
+    LEVELS,
+    MODEL_STEP_HOURS,
+    display_path,
+    parse_lead_hours,
+    parse_utc,
+)
 from metrics import G, area_weights, weighted_bias, weighted_rmse
 from sources import CachedCaseSource, EarthmoverSource
 
@@ -259,7 +266,7 @@ def main() -> None:
         "init_time": args.init_time.isoformat(),
         "lead_hours": args.lead_hours,
         "checkpoint": args.checkpoint,
-        "checkpoint_path": args.checkpoint_path,
+        "checkpoint_path": display_path(args.checkpoint_path),
         "official_15deg": OFFICIAL_15,
         "official_time_index": time_idx,
         "official_lead_index": lead_idx,

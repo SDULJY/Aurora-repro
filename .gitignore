@@ -1,7 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local environment / secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets*
+.vscode/
+.idea/
+.DS_Store
+
+# Data / model weights (download or regenerate locally)
 *.nc
 *.npy
 *.npz
 *.ckpt
-*.log
-__pycache__/
+*.safetensors
+*.pt
+*.pth
+*.zarr/
 cache/
+*.log
+
+# Local logs / temporary files
+*.tmp
