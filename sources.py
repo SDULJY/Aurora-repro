@@ -16,7 +16,8 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import gcsfs
+import aiohttp
+import fsspec
 import numpy as np
 import xarray as xr
 import zarr
@@ -39,6 +40,22 @@ WB2_CLIM15 = (
 )
 WB2_TIME_ORIGIN = np.datetime64("1959-01-01T00:00:00", "ns")
 CROP_LAT = 720
+GCS_BASE = "https://storage.googleapis.com/"
+
+
+def open_public_zarr(path: str) -> zarr.Group:
+    """直接通过 HTTP 读取公开 GCS 上的 zarr store。
+
+    这比 gcsfs 的默认传输更适合大 chunk：每个请求都有明确的 aiohttp 超时，
+    避免单个 54 MB chunk 卡死线程池。
+    """
+    fs = fsspec.filesystem(
+        "http",
+        client_kwargs={
+            "timeout": aiohttp.ClientTimeout(total=120, sock_read=120),
+        },
+    )
+    return zarr.open_group(fs.get_mapper(GCS_BASE + path), mode="r")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -236,8 +253,7 @@ class WB2Source:
         os.makedirs(cache_dir, exist_ok=True)
         self.cache_dir = cache_dir
         self.workers = workers
-        self.fs = gcsfs.GCSFileSystem(token="anon")
-        self.g = zarr.open_group(self.fs.get_mapper(WB2_ERA5), mode="r")
+        self.g = open_public_zarr(WB2_ERA5)
         self.time_hours = np.asarray(self.g["time"][:], dtype=np.int64)
         self.lat = np.asarray(self.g["latitude"][:], dtype=np.float64)
         self.lon = np.asarray(self.g["longitude"][:], dtype=np.float64)
@@ -401,10 +417,12 @@ class HREST0Source:
     只提供 IC；每条 pressure chunk 是 13 层整块（约 54 MB），用多线程并发读取。
     """
 
-    def __init__(self, workers: int = 10):
+    def __init__(self, workers: int = 10, cache_dir: str = "cache"):
         self.workers = workers
-        self.fs = gcsfs.GCSFileSystem(token="anon")
-        self.g = zarr.open_group(self.fs.get_mapper(HRES_T0), mode="r")
+        self.cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+        # 给 GCS 请求设置超时，避免单个 chunk 卡死整个线程池。
+        self.g = open_public_zarr(HRES_T0)
         self.time_hours = np.asarray(self.g["time"][:], dtype=np.int64)
         self.lat = np.asarray(self.g["latitude"][:], dtype=np.float64)
         self.lon = np.asarray(self.g["longitude"][:], dtype=np.float64)
@@ -427,55 +445,91 @@ class HREST0Source:
             raise RuntimeError(f"HRES T0 没有时次 {t.isoformat()}")
         return pos
 
-    def _read(self, name: str, pos: int) -> np.ndarray:
-        a = np.asarray(self.g[name][pos], dtype=np.float32)
-        if self.flip_lat:
-            a = a[..., ::-1, :]
-        if self.flip_lon:
-            a = a[..., ::-1]
-        return a
+    def _read(self, name: str, pos: int, attempts: int = 4) -> np.ndarray:
+        for i in range(attempts):
+            try:
+                a = np.asarray(self.g[name][pos], dtype=np.float32)
+                if self.flip_lat:
+                    a = a[..., ::-1, :]
+                if self.flip_lon:
+                    a = a[..., ::-1]
+                return a
+            except Exception as exc:  # noqa: BLE001 - 网络错误统一重试
+                if i + 1 == attempts:
+                    raise
+                print(
+                    f"  重试 HRES T0 {name}[{pos}]: {type(exc).__name__}",
+                    flush=True,
+                )
+                time.sleep(2 * (i + 1))
+        raise RuntimeError("unreachable")
+
+    def _ic_cache_path(self, init_time: dt.datetime) -> str:
+        return os.path.join(
+            self.cache_dir, f"hres_ic_{init_time:%Y%m%dT%H%M}.npz"
+        )
 
     def load_ic(self, init_time: dt.datetime):
         history = [
             init_time - dt.timedelta(hours=6),
             init_time,
         ]
-        positions = [self.index(t) for t in history]
-        futures = {}
-        with ThreadPoolExecutor(max_workers=self.workers) as ex:
-            for pos in positions:
-                for name in ["geopotential", "temperature", "u_component_of_wind",
-                             "v_component_of_wind", "specific_humidity"]:
-                    futures[ex.submit(self._read, name, pos)] = ("press", name, pos)
-                for name in ["2m_temperature", "10m_u_component_of_wind",
-                             "10m_v_component_of_wind", "mean_sea_level_pressure"]:
-                    futures[ex.submit(self._read, name, pos)] = ("surf", name, pos)
-            results = {}
-            total = len(futures)
-            for done, fut in enumerate(as_completed(futures), start=1):
-                results[futures[fut]] = fut.result()
-                if done % 5 == 0 or done == total:
-                    print(f"    HRES T0 {done}/{total} chunks", flush=True)
+        cache_path = self._ic_cache_path(init_time)
+        if os.path.exists(cache_path):
+            data = np.load(cache_path)
+            press_arrays = {
+                k: data[f"press_{k}"] for k in ["z", "t", "u", "v", "q"]
+            }
+            surf_arrays = {
+                k: data[f"surf_{k}"] for k in ["t2m", "u10", "v10", "msl"]
+            }
+            print(f"  使用缓存 HRES IC: {cache_path}", flush=True)
+        else:
+            positions = [self.index(t) for t in history]
+            futures = {}
+            with ThreadPoolExecutor(max_workers=self.workers) as ex:
+                for pos in positions:
+                    for name in ["geopotential", "temperature", "u_component_of_wind",
+                                 "v_component_of_wind", "specific_humidity"]:
+                        futures[ex.submit(self._read, name, pos)] = ("press", name, pos)
+                    for name in ["2m_temperature", "10m_u_component_of_wind",
+                                 "10m_v_component_of_wind", "mean_sea_level_pressure"]:
+                        futures[ex.submit(self._read, name, pos)] = ("surf", name, pos)
+                results = {}
+                total = len(futures)
+                for done, fut in enumerate(as_completed(futures), start=1):
+                    results[futures[fut]] = fut.result()
+                    if done % 5 == 0 or done == total:
+                        print(f"    HRES T0 {done}/{total} chunks", flush=True)
 
-        press_names = {
-            "geopotential": "z", "temperature": "t", "u_component_of_wind": "u",
-            "v_component_of_wind": "v", "specific_humidity": "q",
-        }
-        surf_names = {
-            "2m_temperature": "t2m", "10m_u_component_of_wind": "u10",
-            "10m_v_component_of_wind": "v10", "mean_sea_level_pressure": "msl",
-        }
-        press_arrays = {}
-        for name, key in press_names.items():
-            arr = np.stack([results[("press", name, pos)] for pos in positions])
-            if self.levels != LEVELS:
-                order = [self.levels.index(lev) for lev in LEVELS]
-                arr = arr[:, order]
-            press_arrays[key] = arr
-        surf_arrays = {
-            key: np.stack([results[("surf", name, pos)] for pos in positions])
-            for name, key in surf_names.items()
-        }
+            press_names = {
+                "geopotential": "z", "temperature": "t", "u_component_of_wind": "u",
+                "v_component_of_wind": "v", "specific_humidity": "q",
+            }
+            surf_names = {
+                "2m_temperature": "t2m", "10m_u_component_of_wind": "u10",
+                "10m_v_component_of_wind": "v10", "mean_sea_level_pressure": "msl",
+            }
+            press_arrays = {}
+            for name, key in press_names.items():
+                arr = np.stack([results[("press", name, pos)] for pos in positions])
+                if self.levels != LEVELS:
+                    order = [self.levels.index(lev) for lev in LEVELS]
+                    arr = arr[:, order]
+                press_arrays[key] = arr
+            surf_arrays = {
+                key: np.stack([results[("surf", name, pos)] for pos in positions])
+                for name, key in surf_names.items()
+            }
+            tmp_path = cache_path + ".tmp.npz"
+            np.savez(
+                tmp_path,
+                **{f"press_{k}": v for k, v in press_arrays.items()},
+                **{f"surf_{k}": v for k, v in surf_arrays.items()},
+            )
+            os.replace(tmp_path, cache_path)
+            print(f"  HRES IC 已缓存: {cache_path}", flush=True)
+
         single = _make_single(surf_arrays, history, self.lat, self.lon)
         press = _make_press(press_arrays, history, self.lat, self.lon)
         return single, press
@@ -606,8 +660,7 @@ class ClimatologySource:
         self.cache_dir = cache_dir
         self.workers = workers
         self.use_cache = use_cache
-        self.fs = gcsfs.GCSFileSystem(token="anon")
-        self.g = zarr.open_group(self.fs.get_mapper(WB2_CLIM15), mode="r")
+        self.g = open_public_zarr(WB2_CLIM15)
         self.hour = np.asarray(self.g["hour"][:], dtype=np.int64)
         self.dayofyear = np.asarray(self.g["dayofyear"][:], dtype=np.int64)
         self.lat = np.asarray(self.g["latitude"][:], dtype=np.float64)
