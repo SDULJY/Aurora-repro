@@ -444,7 +444,7 @@ def parse_igra_2022(path: Path, target_times: set[datetime]) -> dict[datetime, d
                 except (ValueError, IndexError):
                     continue
                 # IGRA2 数值：气压 Pa、位势高度 m、温度 0.1°C、风速 0.1 m/s
-                if abs(pressure - 85000) <= 500 and temp != -9999:
+                if abs(pressure - 85000) <= 500 and -1000 <= temp <= 600:
                     out[current]["t850"] = temp / 10.0 + 273.15
                     if wdir != -9999 and wspd != -9999 and 0 <= wdir <= 360:
                         speed = wspd / 10.0

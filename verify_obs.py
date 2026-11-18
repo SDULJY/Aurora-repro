@@ -362,9 +362,11 @@ def main() -> None:
                    "climatology": args.climatology,
                    "summary": summary}, f, ensure_ascii=False, indent=2)
 
-    # 图：RMSE vs lead
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-    axes = axes.ravel()
+    # 图：RMSE vs lead（1 行 × 5 列横向布局）
+    fig, axes = plt.subplots(
+        1, len(ALL_VARS), figsize=(4.0 * len(ALL_VARS), 3.8), sharex=True
+    )
+    axes = np.atleast_1d(axes).ravel()
     for ax, var in zip(axes, ALL_VARS):
         for method, style in [("aurora", "-o"), ("era5", "-s"), ("persistence", "-^")]:
             pts = [r for r in summary if r["variable"] == var and r["method"] == method]
@@ -372,8 +374,9 @@ def main() -> None:
             if pts:
                 ax.plot([r["lead_hours"] for r in pts], [r["rmse"] for r in pts], style, label=method, ms=3)
         ax.set_title(var); ax.set_xlabel("lead (h)"); ax.set_ylabel("RMSE")
-        ax.grid(alpha=0.3); ax.legend(fontsize=8)
-    axes[len(ALL_VARS)].axis("off")
+        ax.grid(alpha=0.3); ax.legend(fontsize=7)
+    for ax in axes[len(ALL_VARS):]:
+        ax.axis("off")
     fig.tight_layout(); fig.savefig(out / "rmse_vs_lead.png", dpi=150); plt.close(fig)
 
     log(f"结果已保存: {out}/summary.csv, per_obs.npz, rmse_vs_lead.png")

@@ -151,8 +151,10 @@ def plot_summary(summary: list[dict], out_dir: str) -> None:
             for row in summary
         ):
             continue
-        fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-        axes = axes.ravel()
+        fig, axes = plt.subplots(
+            1, len(variables), figsize=(4.0 * len(variables), 3.8), sharex=True
+        )
+        axes = np.atleast_1d(axes).ravel()
         for ax, variable in zip(axes, variables):
             for method in methods:
                 points = [
@@ -174,9 +176,9 @@ def plot_summary(summary: list[dict], out_dir: str) -> None:
             ax.set_xlabel("lead time (h)")
             ax.set_ylabel(metric.upper())
             ax.grid(alpha=0.3)
-            ax.legend(fontsize=8)
-        if len(variables) < len(axes):
-            axes[len(variables)].axis("off")
+            ax.legend(fontsize=7)
+        for ax in axes[len(variables):]:
+            ax.axis("off")
         fig.tight_layout()
         path = os.path.join(out_dir, fname)
         fig.savefig(path, dpi=150)

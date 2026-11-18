@@ -322,7 +322,7 @@ def parse_igra_2022(path: Path, target_hours: set[int] | None = None) -> dict[st
                     wspd = int(line[40:45])
                 except (ValueError, IndexError):
                     continue
-                if abs(pressure - 85000) <= 500 and temp != -9999:
+                if abs(pressure - 85000) <= 500 and -1000 <= temp <= 600:
                     t850[current_idx] = temp / 10.0 + 273.15
                     if wdir != -9999 and wspd != -9999 and 0 <= wdir <= 360:
                         speed = wspd / 10.0
