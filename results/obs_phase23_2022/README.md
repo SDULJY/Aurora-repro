@@ -85,5 +85,6 @@
 - `per_obs.npz.gz` — 逐观测配对记录（压缩后约 6.3 MB；原始 `per_obs.npz` 约 125 MB，不入库）
 - `summary_stratified.csv` — US/non-US、区域、季节分层
 - `rmse_vs_lead.png` — RMSE 随 lead 曲线
+- `stations_map.png` — 181 个 ISD + 200 个 IGRA2 站点分布（US/non-US 区分）
 - 数据/代码：`obs_sources.py`、`fetch_obs.py`、`verify_obs.py`、`summarize_obs.py`
 - 解析缓存：`cache/obs_parsed/`（181 ISD + 200 IGRA2）

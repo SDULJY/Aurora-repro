@@ -91,6 +91,7 @@
 - **ERA5-at-station**：验证时刻的再分析分析场，不是预报；它的 RMSE 不随 lead 增长，只能作为“再分析相对观测”的参考。
 - **站点样本限制**：2022 年 ISD-Lite 通过覆盖率筛选的非美国站很少，181 站中美国 120 个；不能当作全球面积平均。区域/US-nonUS 分层见结果目录。
 - 2t 海拔订正效果有限：+24/+120h 略改善，+240h 反而略差并引入正偏差。
+- 站点分布图：[`results/obs_phase23_2022/stations_map.png`](results/obs_phase23_2022/stations_map.png)。
 - 详细报告、逐观测数据和分层结果：[`results/obs_phase23_2022/README.md`](results/obs_phase23_2022/README.md)。
 
 <details>
